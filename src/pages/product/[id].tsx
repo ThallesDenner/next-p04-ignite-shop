@@ -1,14 +1,13 @@
-import { useState } from "react";
 import { GetStaticPaths, GetStaticProps } from "next";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import Image from "next/image";
 
-import axios from "axios";
 import Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
+import { formatCurrencyString, useShoppingCart } from "use-shopping-cart";
 
-import { priceFormatter } from "@/utils/formatter";
+import { Spinner } from "@/components/spinner";
 import {
   ImageContainer,
   ProductContainer,
@@ -19,75 +18,60 @@ interface ProductProps {
   product: {
     id: string;
     name: string;
-    imageUrl: string;
-    price: string;
+    image: string;
     description: string;
-    defaultPriceId: string;
+    priceId: string;
+    price: number;
+    currency: string;
   };
 }
 
 export default function Product({ product }: ProductProps) {
   const { isFallback } = useRouter();
-
-  const [isCreatingCheckoutSession, setIsCreatingCheckoutSession] =
-    useState(false);
-
-  async function handleBuyButton() {
-    try {
-      setIsCreatingCheckoutSession(true);
-
-      // Requisição para a API Routes do Next (a url base do front-end é a mesma do servidor Node.js do Next, portanto, não precisa passe http://localhost:3000)
-      const response = await axios.post("/api/checkout", {
-        priceId: product.defaultPriceId, // passamos o id do preço relacionado ao produto escolhido pelo usuário (essa informação é necessária em api/checkout.ts)
-      });
-
-      const { checkoutUrl } = response.data; // veja em api/checkout.ts que a função handler retorna a propriedade checkoutUrl
-
-      window.location.href = checkoutUrl; // redirecionando o usuário para um rota externa à aplicação (página de checkout do Stripe)
-
-      /*Observação:
-        No caso de uma rota interna para uma página de checkout da aplicação, faça o seguinte:
-        const router = useRouter(); // na linha 30
-        router.push("/checkout"); // na linha 46      
-      */
-    } catch (err) {
-      // Aqui, o ideal é conectar com uma ferramenta de observabilidade (Datalog, Sentry, etc)
-      setIsCreatingCheckoutSession(false);
-
-      alert("Falha ao redirecionar para a página de checkout!");
-    }
-  }
+  const { addItem } = useShoppingCart();
 
   if (isFallback) {
-    // O loading não vai aparecer, pois o componente <Link> do next/link está sendo usado para navegar para a página do produto -
+    // O spinner não aparece se partimos da página Home para essa página, pois o componente <Link> do next/link está sendo usado para navegar para essa página.
     // Nesse caso, o Next considera como se fosse fallback: 'blocking' é só mostra a página depois de carregar os dados do produto.
-    return <p>Loading...</p>; // versão da página em carregamento (pode ser um skeletons screens)
+    // Contudo, o spinner irá aparecer se atualizarmos esta página ou se partimos desta página para a página de checkout do Stripe e em seguida retornarmos.
+    return <Spinner />; // versão da página em carregamento (poderia ser um skeletons screens)
   }
+
+  // function handleAddItem(product) {
+  //   addItem(product);
+  // }
 
   return (
     <>
       {/* Tudo que for colocado dentro do componente Head (de next/head) será transportado para dentro do componente Head (de next/document) em _document.tsx */}
       <Head>
-        <title>{product.name} | Ignite Shop</title>
+        <title>{`${product.name} | Ignite Shop`}</title>
       </Head>
 
       <ProductContainer>
         <ImageContainer>
-          <Image src={product.imageUrl} width={520} height={480} alt="" />
+          <Image
+            src={product.image}
+            width={520}
+            height={480}
+            alt=""
+            priority={true}
+          />
         </ImageContainer>
 
         <ProductDetails>
           <h1>{product.name}</h1>
-          <span>{product.price}</span>
+
+          <span>
+            {formatCurrencyString({
+              value: product.price,
+              currency: product.currency,
+            })}
+          </span>
 
           <p>{product.description}</p>
 
-          <button
-            disabled={isCreatingCheckoutSession}
-            onClick={handleBuyButton}
-          >
-            Comprar agora
-          </button>
+          <button onClick={() => addItem(product)}>Colocar na sacola</button>
         </ProductDetails>
       </ProductContainer>
     </>
@@ -96,14 +80,15 @@ export default function Product({ product }: ProductProps) {
 
 export const getStaticPaths: GetStaticPaths = async () => {
   return {
-    // paths é um array de objetos - cada objeto deve conter o nome e o valor dos parâmetros de sua respectiva página.
+    // paths é um array de objetos que serão passados para getStaticProps - cada objeto deve conter o nome e o valor dos parâmetros de sua respectiva página
     paths: [
       {
         params: { id: "prod_Og8wtLj0O7g4aA" },
       },
     ],
-    // fallback: false, // será renderizado a página 404 ao acessar uma página de um produto cujo id não esteja em paths
     fallback: true, // ao acessar uma página de um produto cujo id não esteja em paths, o Next irá enviar esse id para a função getStaticProps e em seguida executá-la para gerar a versão estática da página
+    // fallback: false, // será renderizado a página 404 ao acessar uma página de um produto cujo id não esteja em paths
+    // fallback: 'blocking', // ao acessar uma página de um produto cujo id não esteja em paths, o Next irá mostrar uma tela em branco, até que tenha carregado as informações a serem mostradas em tela
   };
 };
 
@@ -123,7 +108,8 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     expand: ["default_price"],
   });
 
-  const price = product.default_price as Stripe.Price; // por causa da expansão na linha 123, price é do tipo Stripe.Price
+  // TypeScript não reconhece a expansão realizada na linha 108, daí ele não sabe se product.default_price é uma string ou Stripe.Price (isto é resolvido abaixo)
+  const price = product.default_price as Stripe.Price; // price é do tipo Stripe.Price por causa da expansão na linha 108
 
   return {
     props: {
@@ -131,14 +117,34 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
       product: {
         id: product.id,
         name: product.name,
-        imageUrl: product.images[0], // no Stripe, um produto pode ter várias imagens; neste caso cada produto tem apenas uma imagem
-        // TypeScript não reconhece a expansão na linha 123, daí ele não sabe se product.default_price é uma string ou Stripe.Price (contornamos isso na linha 126)
-        // price: priceFormatter.format((product.default_price.unit_amount as number) / 100),
-        price: priceFormatter.format((price.unit_amount as number) / 100), // price.unit_amount está em centavos, por isso dividimos por 100
+        image: product.images[0], // no Stripe, um produto pode ter várias imagens, neste caso cada produto tem apenas uma imagem
         description: product.description,
-        defaultPriceId: price.id,
+        priceId: price.id,
+        price: price.unit_amount, // o valor está em centavos
+        currency: price.currency,
       },
     },
     revalidate: 60 * 60 * 1, // o Next irá criar uma versão em cache dessa página a cada 1 hora (3600 segundos) após o build
   };
 };
+
+/*
+Observações:
+- Se fizermos a requisição para obter os dados do produto dentro do componente, esses dados não estarão disponíveis no momento que os indexadores e/ou robôs 
+visualizarem a página. Então, a melhor maneira de realizar essa requisição é a partir de uma função que será executada no lado do servidor do Next (SSR ou SSG). 
+Como os dados do produto não muda com muita frequência e não depende de informações do contexto de execução da página, podemos deixar a página do produto em 
+cache por algum tempo, por isso escolhemos utilizar getStaticProps.
+- Tanto a página home como a página product são páginas estáticas. No entanto, diferentemente da página home, a página product recebe um parâmetro (id do produto), 
+pois ela tem que mudar de acordo com o produto, ou seja, precisamos gerar uma página estática por produto. Uma das informações que é passada para a função 
+getStaticProps é um objeto chamado params, no qual podemos acessar o parâmetro da rota (indicado no nome do arquivo). No caso, o parâmetro é o id do produto 
+e essa informação é necessária para realizar a requisição para a API do Stripe. 
+- Para páginas SSG dinâmicas, ou seja, páginas que recebem parâmetros, precisamos obrigatoriamente exportar a função getStaticPaths. Como a página product é uma 
+página dinâmica (ela muda de acordo com o parâmetro id), devemos exportar a função getStaticPaths dentro dela. Se não fizermos isso, ocorrerá um erro e a página 
+não será renderizada.
+- Suponha que acessamos uma página de um produto cujo id não esteja em paths. Ao rodar a aplicação com fallback: true, o Next irá mostrar a página sem as 
+informações do produto, passar esse id para a função getStaticProps e executá-la de forma assíncrona. Como existirá um delay na apresentação dos dados do produto 
+em tela, é aconselhável criar um estado de carregamento (loading em tela, skeletons screens, etc). Podemos usar o hook useRouter do Next para detectar um estado 
+de carregamento da página (veja as linhas 30 a 39).
+- Por causa do comportamento padrão do componente Link do Next, quando navegamos para uma página que tem fallback: true, ela se comporta como fallback: 'blocking'. 
+Você pode ver isso na documentação: https://nextjs.org/docs/pages/api-reference/functions/get-static-paths#fallback-true. 
+*/

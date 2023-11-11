@@ -4,33 +4,38 @@ import { styled } from "..";
 // O primeiro parâmetro da função styled recebe o nome da tag html e o segundo um objeto JavaScript com os estilos
 
 export const ProductContainer = styled("main", {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  alignItems: "stretch",
-  gap: "4rem",
-
   maxWidth: 1180,
+  display: "flex",
+  gap: "4rem",
   margin: "0 auto",
+  marginBottom: "2rem",
+
+  "@media (max-width: 768px)": {
+    flexDirection: "column",
+  },
 });
 
 export const ImageContainer = styled("div", {
-  width: "100%",
-  maxWidth: 576,
-  height: "calc(656px - 0.5rem)",
+  maxWidth: 558,
+  flex: 1,
   background: "linear-gradient(180deg, #1ea483 0%, #7465d4 100%)",
   borderRadius: 8,
-  padding: "0.25rem",
+  // padding: "0.25rem",
 
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
 
   img: {
+    maxWidth: "100%",
+    height: "auto",
     objectFit: "cover",
   },
 });
 
 export const ProductDetails = styled("div", {
+  maxWidth: 558,
+  flex: 1,
   display: "flex",
   flexDirection: "column",
 
@@ -47,7 +52,7 @@ export const ProductDetails = styled("div", {
   },
 
   p: {
-    marginTop: "2.5rem",
+    margin: "2.5rem auto",
     fontSize: "$md",
     lineHeight: 1.6,
     color: "$gray300",
@@ -64,13 +69,6 @@ export const ProductDetails = styled("div", {
     fontWeight: "bold",
     fontSize: "$md",
 
-    "&:disabled": {
-      opacity: 0.6,
-      cursor: "not-allowed",
-    },
-
-    "&:not(:disabled):hover": {
-      backgroundColor: "$green300",
-    },
+    "&:hover": { backgroundColor: "$green300" },
   },
 });

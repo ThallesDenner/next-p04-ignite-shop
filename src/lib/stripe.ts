@@ -9,7 +9,8 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 /*
-Observação:
-O TypeScript não reconhece as variáveis de ambiente, daí ele sempre considera que o valor pode ser uma string ou undefined. Contudo, podemos forçar o TypeScript 
-a entender que o valor da variável de ambiante sempre estará definido adicionando um ! no final da variável (veja a linha 3).
+Observações:
+- Neste arquivo fazemos as configurações necessárias para buscar os produtos no Stripe
+- O TypeScript não reconhece as variáveis de ambiente, daí ele sempre considera que o valor pode ser uma string ou undefined. Contudo, podemos forçar o 
+TypeScript a entender que o valor da variável de ambiante sempre estará definido adicionando um ! no final da variável (veja a linha 3).
 */
